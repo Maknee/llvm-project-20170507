@@ -80,6 +80,7 @@ template <> struct MappingTraits<xray::YAMLXRayRecord> {
     IO.mapOptional("args", Record.CallArgs);
     IO.mapRequired("cpu", Record.CPU);
     IO.mapRequired("thread", Record.TId);
+    IO.mapRequired("process-id", Record.PId);
     IO.mapRequired("kind", Record.Type);
     IO.mapRequired("tsc", Record.TSC);
   }

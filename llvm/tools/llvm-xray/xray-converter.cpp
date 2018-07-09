@@ -141,6 +141,7 @@ void TraceConverter::exportAsRAWv1(const Trace &Records, raw_ostream &OS) {
     Writer.write(R.FuncId);
     Writer.write(R.TSC);
     Writer.write(R.TId);
+    Writer.write(R.PId);
     Writer.write(Padding4B);
     Writer.write(Padding4B);
     Writer.write(Padding4B);
@@ -230,6 +231,7 @@ StackTrieNode *findOrCreateStackNode(
 }
 
 void writeTraceViewerRecord(raw_ostream &OS, int32_t FuncId, uint32_t TId,
+                            uint32_t PId,
                             bool Symbolize,
                             const FuncIdConversionHelper &FuncIdHelper,
                             double EventTimestampUs,
@@ -237,11 +239,11 @@ void writeTraceViewerRecord(raw_ostream &OS, int32_t FuncId, uint32_t TId,
                             StringRef FunctionPhenotype) {
   OS << "    ";
   OS << llvm::formatv(
-      R"({ "name" : "{0}", "ph" : "{1}", "tid" : "{2}", "pid" : "1", )"
-      R"("ts" : "{3:f3}", "sf" : "{4}" })",
+      R"({ "name" : "{0}", "ph" : "{1}", "tid" : "{2}", "pid" : "{3}", )"
+      R"("ts" : "{4:f4}", "sf" : "{5}" })",
       (Symbolize ? FuncIdHelper.SymbolOrNumber(FuncId)
                  : llvm::to_string(FuncId)),
-      FunctionPhenotype, TId, EventTimestampUs, StackCursor.ExtraData.id);
+      FunctionPhenotype, TId, PId, EventTimestampUs, StackCursor.ExtraData.id);
 }
 
 } // namespace
@@ -285,7 +287,7 @@ void TraceConverter::exportAsChromeTraceEventFormat(const Trace &Records,
       // type of B for begin or E for end, thread id, process id (faked),
       // timestamp in microseconds, and a stack frame id. The ids are logged
       // in an id dictionary after the events.
-      writeTraceViewerRecord(OS, R.FuncId, R.TId, Symbolize, FuncIdHelper,
+      writeTraceViewerRecord(OS, R.FuncId, R.TId, R.PId, Symbolize, FuncIdHelper,
                              EventTimestampUs, *StackCursor, "B");
       break;
     case RecordTypes::EXIT:
@@ -297,7 +299,7 @@ void TraceConverter::exportAsChromeTraceEventFormat(const Trace &Records,
       // (And/Or in loop termination below)
       StackTrieNode *PreviousCursor = nullptr;
       do {
-        writeTraceViewerRecord(OS, StackCursor->FuncId, R.TId, Symbolize,
+        writeTraceViewerRecord(OS, StackCursor->FuncId, R.TId, R.PId, Symbolize,
                                FuncIdHelper, EventTimestampUs, *StackCursor,
                                "E");
         PreviousCursor = StackCursor;
