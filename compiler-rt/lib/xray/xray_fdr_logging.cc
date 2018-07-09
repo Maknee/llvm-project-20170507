@@ -125,9 +125,9 @@ static ThreadLocalData &getThreadLocalData() {
   return TLD;
 }
 
-static void writeNewBufferPreamble(tid_t Tid,
+static void writeNewBufferPreamble(pid_t Pid, tid_t Tid,
                                    timespec TS) XRAY_NEVER_INSTRUMENT {
-  static constexpr int InitRecordsCount = 2;
+  static constexpr int InitRecordsCount = 3;
   auto &TLD = getThreadLocalData();
   MetadataRecord Metadata[InitRecordsCount];
   {
@@ -161,6 +161,16 @@ static void writeNewBufferPreamble(tid_t Tid,
                     sizeof(Micros));
   }
 
+  // Also write the Pid record.
+  {
+    // Write out a MetadataRecord that contains the current pid
+    auto &PidMetadata = Metadata[2];
+    PidMetadata.Type = uint8_t(RecordType::Metadata);
+    PidMetadata.RecordKind = uint8_t(MetadataRecord::RecordKinds::Pid);
+    int32_t pid = static_cast<int32_t>(Pid);
+    internal_memcpy(&PidMetadata.Data, &pid, sizeof(pid));
+  }
+
   TLD.NumConsecutiveFnEnters = 0;
   TLD.NumTailCalls = 0;
   if (TLD.BQ == nullptr || TLD.BQ->finalizing())
@@ -178,11 +188,12 @@ static void setupNewBuffer(int (*wall_clock_reader)(
   auto &TLD = getThreadLocalData();
   auto &B = TLD.Buffer;
   TLD.RecordPtr = static_cast<char *>(B.Data);
+  pid_t Pid = internal_getpid();
   tid_t Tid = GetTid();
   timespec TS{0, 0};
   // This is typically clock_gettime, but callers have injection ability.
   wall_clock_reader(CLOCK_MONOTONIC, &TS);
-  writeNewBufferPreamble(Tid, TS);
+  writeNewBufferPreamble(Pid, Tid, TS);
   TLD.NumConsecutiveFnEnters = 0;
   TLD.NumTailCalls = 0;
 }
