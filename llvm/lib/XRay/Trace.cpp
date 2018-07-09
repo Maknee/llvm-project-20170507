@@ -463,6 +463,7 @@ Error processFDRFunctionRecord(FDRState &State, uint8_t RecordFirstByte,
     }
     Record.CPU = State.CPUId;
     Record.TId = State.ThreadId;
+    Record.PId = State.ProcessId;
     // Back up to read first 32 bits, including the 4 we pulled RecordType
     // and RecordKind out of. The remaining 28 are FunctionId.
     uint32_t OffsetPtr = 0;
@@ -651,7 +652,7 @@ Error loadYAMLLog(StringRef Data, XRayFileHeader &FileHeader,
   std::transform(Trace.Records.begin(), Trace.Records.end(),
                  std::back_inserter(Records), [&](const YAMLXRayRecord &R) {
                    return XRayRecord{R.RecordType, R.CPU, R.Type,    R.FuncId,
-                                     R.TSC,        R.TId, R.CallArgs};
+                                     R.TSC,        R.TId, R.PId,     R.CallArgs};
                  });
   return Error::success();
 }

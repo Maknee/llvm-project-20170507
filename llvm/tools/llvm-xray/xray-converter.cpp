@@ -91,7 +91,7 @@ void TraceConverter::exportAsYAML(const Trace &Records, raw_ostream &OS) {
     Trace.Records.push_back({R.RecordType, R.CPU, R.Type, R.FuncId,
                              Symbolize ? FuncIdHelper.SymbolOrNumber(R.FuncId)
                                        : llvm::to_string(R.FuncId),
-                             R.TSC, R.TId, R.CallArgs});
+                             R.TSC, R.TId, R.PId, R.CallArgs});
   }
   Output Out(OS, nullptr, 0);
   Out << Trace;

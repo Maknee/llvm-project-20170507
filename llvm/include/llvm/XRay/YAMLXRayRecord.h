@@ -37,6 +37,7 @@ struct YAMLXRayRecord {
   std::string Function;
   uint64_t TSC;
   uint32_t TId;
+  uint32_t PId;
   std::vector<uint64_t> CallArgs;
 };
 
