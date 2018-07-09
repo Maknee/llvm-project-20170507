@@ -148,6 +148,7 @@ Error loadNaiveFormatLog(StringRef Data, XRayFileHeader &FileHeader,
 struct FDRState {
   uint16_t CPUId;
   uint16_t ThreadId;
+  int32_t ProcessId;
   uint64_t BaseTSC;
 
   /// Encode some of the state transitions for the FDR log reader as explicit
@@ -161,6 +162,7 @@ struct FDRState {
     CUSTOM_EVENT_DATA,
     CALL_ARGUMENT,
     BUFFER_EXTENTS,
+    PID_RECORD,
   };
   Token Expects;
 
@@ -188,6 +190,8 @@ const char *fdrStateToTwine(const FDRState::Token &state) {
     return "CALL_ARGUMENT";
   case FDRState::Token::BUFFER_EXTENTS:
     return "BUFFER_EXTENTS";
+  case FDRState::Token::PID_RECORD:
+    return "PID_RECORD";
   }
   return "UNKNOWN";
 }
@@ -264,6 +268,23 @@ Error processFDRWallTimeRecord(FDRState &State, uint8_t RecordFirstByte,
 
   // TODO: Someday, reconcile the TSC ticks to wall clock time for presentation
   // purposes. For now, we're ignoring these records.
+  State.Expects = FDRState::Token::PID_RECORD;
+  return Error::success();
+}
+
+/// State transition when a PidRecord is encountered.
+Error processFDRPidRecord(FDRState &State, uint8_t RecordFirstByte,
+                                DataExtractor &RecordExtractor) {
+
+  if (State.Expects != FDRState::Token::PID_RECORD)
+    return make_error<StringError>(
+        Twine("Malformed log. Read Pid record kind out of sequence; "
+              "expected: ") +
+            fdrStateToTwine(State.Expects),
+        std::make_error_code(std::errc::executable_format_error));
+
+  uint32_t OffsetPtr = 1; // Read starting after the first byte.
+  State.ProcessId = RecordExtractor.getU32(&OffsetPtr);
   State.Expects = FDRState::Token::NEW_CPU_ID_RECORD;
   return Error::success();
 }
@@ -376,6 +397,10 @@ Error processFDRMetadataRecord(FDRState &State, uint8_t RecordFirstByte,
     if (auto E = processBufferExtents(State, RecordFirstByte, RecordExtractor))
       return E;
     break;
+  case 9: // Pid
+    if (auto E = processFDRPidRecord(State, RecordFirstByte, RecordExtractor))
+      return E;
+    break;
   default:
     // Widen the record type to uint16_t to prevent conversion to char.
     return make_error<StringError>(
@@ -404,6 +429,10 @@ Error processFDRFunctionRecord(FDRState &State, uint8_t RecordFirstByte,
   case FDRState::Token::WALLCLOCK_RECORD:
     return make_error<StringError>(
         "Malformed log. Received Function Record when expecting wallclock.",
+        std::make_error_code(std::errc::executable_format_error));
+  case FDRState::Token::PID_RECORD:
+    return make_error<StringError>(
+        "Malformed log. Received Function Record when expecting pid.",
         std::make_error_code(std::errc::executable_format_error));
   case FDRState::Token::NEW_CPU_ID_RECORD:
     return make_error<StringError>(
@@ -530,7 +559,7 @@ Error loadFDRLog(StringRef Data, XRayFileHeader &FileHeader,
         Twine("Unsupported version '") + Twine(FileHeader.Version) + "'",
         std::make_error_code(std::errc::executable_format_error));
   }
-  FDRState State{0, 0, 0, InitialExpectation, BufferSize, 0};
+  FDRState State{0, 0, 0, 0, InitialExpectation, BufferSize, 0};
 
   // RecordSize will tell the loop how far to seek ahead based on the record
   // type that we have just read.
