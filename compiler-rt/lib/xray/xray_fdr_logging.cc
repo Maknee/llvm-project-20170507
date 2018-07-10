@@ -125,8 +125,9 @@ static ThreadLocalData &getThreadLocalData() {
   return TLD;
 }
 
-static void writeNewBufferPreamble(pid_t Pid, tid_t Tid,
-                                   timespec TS) XRAY_NEVER_INSTRUMENT {
+static void writeNewBufferPreamble(tid_t Tid,
+                                   timespec TS,
+                                   pid_t Pid) XRAY_NEVER_INSTRUMENT {
   static constexpr int InitRecordsCount = 3;
   auto &TLD = getThreadLocalData();
   MetadataRecord Metadata[InitRecordsCount];
@@ -188,12 +189,12 @@ static void setupNewBuffer(int (*wall_clock_reader)(
   auto &TLD = getThreadLocalData();
   auto &B = TLD.Buffer;
   TLD.RecordPtr = static_cast<char *>(B.Data);
-  pid_t Pid = internal_getpid();
   tid_t Tid = GetTid();
   timespec TS{0, 0};
+  pid_t Pid = internal_getpid();
   // This is typically clock_gettime, but callers have injection ability.
   wall_clock_reader(CLOCK_MONOTONIC, &TS);
-  writeNewBufferPreamble(Pid, Tid, TS);
+  writeNewBufferPreamble(Tid, TS, Pid);
   TLD.NumConsecutiveFnEnters = 0;
   TLD.NumTailCalls = 0;
 }
