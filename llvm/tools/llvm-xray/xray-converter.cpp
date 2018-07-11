@@ -142,7 +142,7 @@ void TraceConverter::exportAsRAWv1(const Trace &Records, raw_ostream &OS) {
     Writer.write(R.TSC);
     Writer.write(R.TId);
     Writer.write(R.PId);
-    Writer.write(Padding4B);
+
     Writer.write(Padding4B);
     Writer.write(Padding4B);
   }
@@ -284,7 +284,7 @@ void TraceConverter::exportAsChromeTraceEventFormat(const Trace &Records,
                                           StackRootsByThreadId, StacksByStackId,
                                           &id_counter, NodeStore);
       // Each record is represented as a json dictionary with function name,
-      // type of B for begin or E for end, thread id, process id (faked),
+      // type of B for begin or E for end, thread id, process id,
       // timestamp in microseconds, and a stack frame id. The ids are logged
       // in an id dictionary after the events.
       writeTraceViewerRecord(OS, R.FuncId, R.TId, R.PId, Symbolize, FuncIdHelper,

@@ -48,7 +48,7 @@ Error readBinaryFormatHeader(StringRef Data, XRayFileHeader &FileHeader) {
   FileHeader.NonstopTSC = Bitfield & 1uL << 1;
   FileHeader.CycleFrequency = HeaderExtractor.getU64(&OffsetPtr);
   std::memcpy(&FileHeader.FreeFormData, Data.bytes_begin() + OffsetPtr, 16);
-  if (FileHeader.Version != 1 && FileHeader.Version != 2)
+  if (FileHeader.Version != 1 && FileHeader.Version != 2 && FileHeader.Version != 3)
     return make_error<StringError>(
         Twine("Unsupported XRay file version: ") + Twine(FileHeader.Version),
         std::make_error_code(std::errc::invalid_argument));
@@ -78,7 +78,8 @@ Error loadNaiveFormatLog(StringRef Data, XRayFileHeader &FileHeader,
   //   (4)   sint32 : function id
   //   (8)   uint64 : tsc
   //   (4)   uint32 : thread id
-  //   (12)  -      : padding
+  //   (4)   uint32 : process id
+  //   (8)  -      : padding
   for (auto S = Data.drop_front(32); !S.empty(); S = S.drop_front(32)) {
     DataExtractor RecordExtractor(S, true, 8);
     uint32_t OffsetPtr = 0;
@@ -110,6 +111,7 @@ Error loadNaiveFormatLog(StringRef Data, XRayFileHeader &FileHeader,
       Record.FuncId = RecordExtractor.getSigned(&OffsetPtr, sizeof(int32_t));
       Record.TSC = RecordExtractor.getU64(&OffsetPtr);
       Record.TId = RecordExtractor.getU32(&OffsetPtr);
+      Record.PId = RecordExtractor.getU32(&OffsetPtr);
       break;
     }
     case 1: { // Arg payload record.
@@ -118,15 +120,14 @@ Error loadNaiveFormatLog(StringRef Data, XRayFileHeader &FileHeader,
       OffsetPtr += 2;
       int32_t FuncId = RecordExtractor.getSigned(&OffsetPtr, sizeof(int32_t));
       auto TId = RecordExtractor.getU32(&OffsetPtr);
-      if (Record.FuncId != FuncId || Record.TId != TId)
+      auto PId = RecordExtractor.getU32(&OffsetPtr);
+      if (Record.FuncId != FuncId || Record.TId != TId || Record.PId != PId)
         return make_error<StringError>(
             Twine("Corrupted log, found arg payload following non-matching "
                   "function + thread record. Record for function ") +
                 Twine(Record.FuncId) + " != " + Twine(FuncId) + "; offset: " +
                 Twine(S.data() - Data.data()),
             std::make_error_code(std::errc::executable_format_error));
-      // Advance another four bytes to avoid padding.
-      OffsetPtr += 4;
       auto Arg = RecordExtractor.getU64(&OffsetPtr);
       Record.CallArgs.push_back(Arg);
       break;
@@ -268,7 +269,7 @@ Error processFDRWallTimeRecord(FDRState &State, uint8_t RecordFirstByte,
 
   // TODO: Someday, reconcile the TSC ticks to wall clock time for presentation
   // purposes. For now, we're ignoring these records.
-  State.Expects = FDRState::Token::PID_RECORD;
+  State.Expects = FDRState::Token::NEW_CPU_ID_RECORD;
   return Error::success();
 }
 
@@ -346,6 +347,8 @@ Error processFDRCallArgumentRecord(FDRState &State, uint8_t RecordFirstByte,
 /// Beginning with Version 2 of the FDR log, we do not depend on the size of the
 /// buffer, but rather use the extents to determine how far to read in the log
 /// for this particular buffer.
+///
+/// In Version 3, FDR log now includes a pid metadata record after WallTimeMarker
 Error processFDRMetadataRecord(FDRState &State, uint8_t RecordFirstByte,
                                DataExtractor &RecordExtractor,
                                size_t &RecordSize,
@@ -381,7 +384,16 @@ Error processFDRMetadataRecord(FDRState &State, uint8_t RecordFirstByte,
   case 4: // WallTimeMarker
     if (auto E =
             processFDRWallTimeRecord(State, RecordFirstByte, RecordExtractor))
-      return E;
+       {
+         return E;
+       }
+       else
+       {
+         if (Version >= 3)
+         {
+           State.Expects = FDRState::Token::PID_RECORD;
+         }
+       }
     break;
   case 5: // CustomEventMarker
     if (auto E = processCustomEventMarker(State, RecordFirstByte,
@@ -507,6 +519,7 @@ Error processFDRFunctionRecord(FDRState &State, uint8_t RecordFirstByte,
 /// BufSize: 8 byte unsigned integer indicating how large the buffer is.
 /// NewBuffer: 16 byte metadata record with Thread Id.
 /// WallClockTime: 16 byte metadata record with human readable time.
+/// Pid: 16 byte metadata record with Pid
 /// NewCPUId: 16 byte metadata record with CPUId and a 64 bit TSC reading.
 /// EOB: 16 byte record in a thread buffer plus mem garbage to fill BufSize.
 /// FunctionSequence: NewCPUId | TSCWrap | FunctionRecord
@@ -520,6 +533,11 @@ Error processFDRFunctionRecord(FDRState &State, uint8_t RecordFirstByte,
 /// BufferExtents: 16 byte metdata record describing how many usable bytes are
 ///                in the buffer. This is measured from the start of the buffer
 ///                and must always be at least 48 (bytes).
+///
+/// In Version 3, we make the following changes:
+///
+/// ThreadBuffer: BufferExtents NewBuffer WallClockTime Pid NewCPUId
+///               FunctionSequence
 /// EOB: *deprecated*
 Error loadFDRLog(StringRef Data, XRayFileHeader &FileHeader,
                  std::vector<XRayRecord> &Records) {
@@ -553,6 +571,7 @@ Error loadFDRLog(StringRef Data, XRayFileHeader &FileHeader,
     InitialExpectation = FDRState::Token::NEW_BUFFER_RECORD_OR_EOF;
     break;
   case 2:
+  case 3:
     InitialExpectation = FDRState::Token::BUFFER_EXTENTS;
     break;
   default:
@@ -602,7 +621,7 @@ Error loadFDRLog(StringRef Data, XRayFileHeader &FileHeader,
     if (!isBufferExtents)
       State.CurrentBufferConsumed += RecordSize;
     assert(State.CurrentBufferConsumed <= State.CurrentBufferSize);
-    if (FileHeader.Version == 2 &&
+    if ((FileHeader.Version == 2 || FileHeader.Version == 3) &&
         State.CurrentBufferSize == State.CurrentBufferConsumed) {
       // In Version 2 of the log, we don't need to scan to the end of the thread
       // buffer if we've already consumed all the bytes we need to.
@@ -711,7 +730,7 @@ Expected<Trace> llvm::xray::loadTraceFile(StringRef Filename, bool Sort) {
   Trace T;
   switch (Type) {
   case NAIVE_FORMAT:
-    if (Version == 1 || Version == 2) {
+    if (Version == 1 || Version == 2 || Version == 3) {
       if (auto E = loadNaiveFormatLog(Data, T.FileHeader, T.Records))
         return std::move(E);
     } else {
@@ -722,7 +741,7 @@ Expected<Trace> llvm::xray::loadTraceFile(StringRef Filename, bool Sort) {
     }
     break;
   case FLIGHT_DATA_RECORDER_FORMAT:
-    if (Version == 1 || Version == 2) {
+    if (Version == 1 || Version == 2 || Version == 3) {
       if (auto E = loadFDRLog(Data, T.FileHeader, T.Records))
         return std::move(E);
     } else {
