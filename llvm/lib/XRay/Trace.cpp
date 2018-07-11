@@ -79,7 +79,7 @@ Error loadNaiveFormatLog(StringRef Data, XRayFileHeader &FileHeader,
   //   (8)   uint64 : tsc
   //   (4)   uint32 : thread id
   //   (4)   uint32 : process id
-  //   (8)  -      : padding
+  //   (8)   -      : padding
   for (auto S = Data.drop_front(32); !S.empty(); S = S.drop_front(32)) {
     DataExtractor RecordExtractor(S, true, 8);
     uint32_t OffsetPtr = 0;
@@ -389,6 +389,7 @@ Error processFDRMetadataRecord(FDRState &State, uint8_t RecordFirstByte,
        }
        else
        {
+         // In Version 3 and and above, a PidRecord is expected after WallTimeRecord
          if (Version >= 3)
          {
            State.Expects = FDRState::Token::PID_RECORD;
