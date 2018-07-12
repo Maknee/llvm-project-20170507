@@ -231,8 +231,7 @@ StackTrieNode *findOrCreateStackNode(
 }
 
 void writeTraceViewerRecord(raw_ostream &OS, int32_t FuncId, uint32_t TId,
-                            uint32_t PId,
-                            bool Symbolize,
+                            uint32_t PId, bool Symbolize,
                             const FuncIdConversionHelper &FuncIdHelper,
                             double EventTimestampUs,
                             const StackTrieNode &StackCursor,
@@ -287,8 +286,8 @@ void TraceConverter::exportAsChromeTraceEventFormat(const Trace &Records,
       // type of B for begin or E for end, thread id, process id,
       // timestamp in microseconds, and a stack frame id. The ids are logged
       // in an id dictionary after the events.
-      writeTraceViewerRecord(OS, R.FuncId, R.TId, R.PId, Symbolize, FuncIdHelper,
-                             EventTimestampUs, *StackCursor, "B");
+      writeTraceViewerRecord(OS, R.FuncId, R.TId, R.PId, Symbolize,
+                             FuncIdHelper, EventTimestampUs, *StackCursor, "B");
       break;
     case RecordTypes::EXIT:
     case RecordTypes::TAIL_EXIT:

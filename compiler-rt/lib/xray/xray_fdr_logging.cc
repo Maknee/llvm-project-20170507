@@ -125,8 +125,7 @@ static ThreadLocalData &getThreadLocalData() {
   return TLD;
 }
 
-static void writeNewBufferPreamble(tid_t Tid,
-                                   timespec TS,
+static void writeNewBufferPreamble(tid_t Tid, timespec TS,
                                    pid_t Pid) XRAY_NEVER_INSTRUMENT {
   static constexpr int InitRecordsCount = 3;
   auto &TLD = getThreadLocalData();

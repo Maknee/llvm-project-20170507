@@ -48,7 +48,8 @@ Error readBinaryFormatHeader(StringRef Data, XRayFileHeader &FileHeader) {
   FileHeader.NonstopTSC = Bitfield & 1uL << 1;
   FileHeader.CycleFrequency = HeaderExtractor.getU64(&OffsetPtr);
   std::memcpy(&FileHeader.FreeFormData, Data.bytes_begin() + OffsetPtr, 16);
-  if (FileHeader.Version != 1 && FileHeader.Version != 2 && FileHeader.Version != 3)
+  if (FileHeader.Version != 1 && FileHeader.Version != 2 &&
+      FileHeader.Version != 3)
     return make_error<StringError>(
         Twine("Unsupported XRay file version: ") + Twine(FileHeader.Version),
         std::make_error_code(std::errc::invalid_argument));
@@ -275,7 +276,7 @@ Error processFDRWallTimeRecord(FDRState &State, uint8_t RecordFirstByte,
 
 /// State transition when a PidRecord is encountered.
 Error processFDRPidRecord(FDRState &State, uint8_t RecordFirstByte,
-                                DataExtractor &RecordExtractor) {
+                          DataExtractor &RecordExtractor) {
 
   if (State.Expects != FDRState::Token::PID_RECORD)
     return make_error<StringError>(
@@ -348,7 +349,8 @@ Error processFDRCallArgumentRecord(FDRState &State, uint8_t RecordFirstByte,
 /// buffer, but rather use the extents to determine how far to read in the log
 /// for this particular buffer.
 ///
-/// In Version 3, FDR log now includes a pid metadata record after WallTimeMarker
+/// In Version 3, FDR log now includes a pid metadata record after
+/// WallTimeMarker
 Error processFDRMetadataRecord(FDRState &State, uint8_t RecordFirstByte,
                                DataExtractor &RecordExtractor,
                                size_t &RecordSize,
@@ -383,18 +385,15 @@ Error processFDRMetadataRecord(FDRState &State, uint8_t RecordFirstByte,
     break;
   case 4: // WallTimeMarker
     if (auto E =
-            processFDRWallTimeRecord(State, RecordFirstByte, RecordExtractor))
-       {
-         return E;
-       }
-       else
-       {
-         // In Version 3 and and above, a PidRecord is expected after WallTimeRecord
-         if (Version >= 3)
-         {
-           State.Expects = FDRState::Token::PID_RECORD;
-         }
-       }
+            processFDRWallTimeRecord(State, RecordFirstByte, RecordExtractor)) {
+      return E;
+    } else {
+      // In Version 3 and and above, a PidRecord is expected after
+      // WallTimeRecord
+      if (Version >= 3) {
+        State.Expects = FDRState::Token::PID_RECORD;
+      }
+    }
     break;
   case 5: // CustomEventMarker
     if (auto E = processCustomEventMarker(State, RecordFirstByte,
@@ -671,8 +670,8 @@ Error loadYAMLLog(StringRef Data, XRayFileHeader &FileHeader,
   Records.clear();
   std::transform(Trace.Records.begin(), Trace.Records.end(),
                  std::back_inserter(Records), [&](const YAMLXRayRecord &R) {
-                   return XRayRecord{R.RecordType, R.CPU, R.Type,    R.FuncId,
-                                     R.TSC,        R.TId, R.PId,     R.CallArgs};
+                   return XRayRecord{R.RecordType, R.CPU, R.Type, R.FuncId,
+                                     R.TSC,        R.TId, R.PId,  R.CallArgs};
                  });
   return Error::success();
 }
