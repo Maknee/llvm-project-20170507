@@ -142,12 +142,9 @@ void TraceConverter::exportAsRAWv1(const Trace &Records, raw_ostream &OS) {
     Writer.write(R.TSC);
     Writer.write(R.TId);
 
-    if (FH.Version >= 3)
-    {
+    if (FH.Version >= 3) {
       Writer.write(R.PId);
-    }
-    else
-    {
+    } else {
       Writer.write(Padding4B);
     }
 
