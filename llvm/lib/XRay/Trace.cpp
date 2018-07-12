@@ -385,15 +385,11 @@ Error processFDRMetadataRecord(FDRState &State, uint8_t RecordFirstByte,
     break;
   case 4: // WallTimeMarker
     if (auto E =
-            processFDRWallTimeRecord(State, RecordFirstByte, RecordExtractor)) {
+            processFDRWallTimeRecord(State, RecordFirstByte, RecordExtractor))
       return E;
-    } else {
-      // In Version 3 and and above, a PidRecord is expected after
-      // WallTimeRecord
-      if (Version >= 3) {
-        State.Expects = FDRState::Token::PID_RECORD;
-      }
-    }
+    // In Version 3 and and above, a PidRecord is expected after WallTimeRecord
+    if (Version >= 3)
+      State.Expects = FDRState::Token::PID_RECORD;
     break;
   case 5: // CustomEventMarker
     if (auto E = processCustomEventMarker(State, RecordFirstByte,
