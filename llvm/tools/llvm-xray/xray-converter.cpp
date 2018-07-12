@@ -141,7 +141,15 @@ void TraceConverter::exportAsRAWv1(const Trace &Records, raw_ostream &OS) {
     Writer.write(R.FuncId);
     Writer.write(R.TSC);
     Writer.write(R.TId);
-    Writer.write(R.PId);
+
+    if (FH.Version >= 3)
+    {
+      Writer.write(R.PId);
+    }
+    else
+    {
+      Writer.write(Padding4B);
+    }
 
     Writer.write(Padding4B);
     Writer.write(Padding4B);
