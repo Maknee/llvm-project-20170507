@@ -125,14 +125,14 @@ Error loadNaiveFormatLog(StringRef Data, XRayFileHeader &FileHeader,
 
       // Make a check for versions above 3 for the Pid field
       if (Record.FuncId != FuncId || Record.TId != TId ||
-          (FileHeader.Version >= 3 ? Record.PId != PId : false)) {
+          (FileHeader.Version >= 3 ? Record.PId != PId : false))
         return make_error<StringError>(
             Twine("Corrupted log, found arg payload following non-matching "
                   "function + thread record. Record for function ") +
                 Twine(Record.FuncId) + " != " + Twine(FuncId) + "; offset: " +
                 Twine(S.data() - Data.data()),
             std::make_error_code(std::errc::executable_format_error));
-      }
+
       auto Arg = RecordExtractor.getU64(&OffsetPtr);
       Record.CallArgs.push_back(Arg);
       break;
